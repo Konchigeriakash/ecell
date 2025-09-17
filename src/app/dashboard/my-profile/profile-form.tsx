@@ -15,15 +15,13 @@ import { Upload, FileText } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 const MAX_FILE_SIZE = 5000000; // 5MB
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+const ACCEPTED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
 
 
-const fileSchema = z.any()
-  .refine((file) => file?.size <= MAX_FILE_SIZE, `Max file size is 5MB.`)
-  .refine(
-    (file) => ACCEPTED_IMAGE_TYPES.includes(file?.type),
-    "Only .jpg, .png and .pdf formats are supported."
-  ).optional();
+const fileSchema = z.object({
+    dataUri: z.string(),
+    mimeType: z.string(),
+  }).optional();
 
 const formSchema = z.object({
   name: z.string().min(1, "Please enter your full name."),
@@ -67,31 +65,48 @@ export default function ProfileForm() {
     values: profile,
   });
 
-  // Helper to convert file to data URI
-  const fileToDataUri = (file: File): Promise<string> => {
+  // Helper to convert file to data URI and get mime type
+  const processFile = (file: File): Promise<{ dataUri: string; mimeType: string }> => {
     return new Promise((resolve, reject) => {
+      if (file.size > MAX_FILE_SIZE) {
+        return reject(new Error('Max file size is 5MB.'));
+      }
+      if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
+        return reject(new Error('Only .jpg, .png and .pdf formats are supported.'));
+      }
+
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = () => resolve({ dataUri: reader.result as string, mimeType: file.type });
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
   };
 
+
   const onSubmit = async (data: FormValues) => {
     const profileData: any = { ...data };
 
-    // Handle file conversions
-    for (const key of ['resume', 'govtId', 'educationCertificate', 'addressProof', 'incomeCertificate']) {
-        if (data[key as keyof FormValues] instanceof File) {
-            profileData[key] = await fileToDataUri(data[key as keyof FormValues] as File);
+    try {
+        // Handle file conversions
+        for (const key of ['resume', 'govtId', 'educationCertificate', 'addressProof', 'incomeCertificate']) {
+            const file = data[key as keyof FormValues] as unknown as File;
+            if (file instanceof File) {
+                profileData[key] = await processFile(file);
+            }
         }
+        
+        setProfile(profileData);
+        toast({
+          title: "Profile Updated",
+          description: "Your profile has been saved successfully.",
+        });
+    } catch (error: any) {
+        toast({
+          variant: "destructive",
+          title: "File Upload Error",
+          description: error.message,
+        });
     }
-    
-    setProfile(profileData);
-    toast({
-      title: "Profile Updated",
-      description: "Your profile has been saved successfully.",
-    });
   };
 
   const renderFileInput = (name: keyof FormValues, label: string, description: string) => (
@@ -105,6 +120,7 @@ export default function ProfileForm() {
                     <div className="flex items-center gap-2">
                         <Input 
                             type="file" 
+                            accept={ACCEPTED_FILE_TYPES.join(",")}
                             onChange={(e) => field.onChange(e.target.files?.[0])} 
                             className="w-full"
                         />
@@ -285,5 +301,3 @@ export default function ProfileForm() {
     </Card>
   );
 }
-
-    
