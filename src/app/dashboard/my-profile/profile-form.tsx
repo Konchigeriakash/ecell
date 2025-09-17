@@ -11,7 +11,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { useLocalStorage } from "@/hooks/use-local-storage";
-import { Upload } from "lucide-react";
+import { Upload, FileText } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+
+const MAX_FILE_SIZE = 5000000; // 5MB
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+
+
+const fileSchema = z.any()
+  .refine((file) => file?.size <= MAX_FILE_SIZE, `Max file size is 5MB.`)
+  .refine(
+    (file) => ACCEPTED_IMAGE_TYPES.includes(file?.type),
+    "Only .jpg, .png and .pdf formats are supported."
+  ).optional();
 
 const formSchema = z.object({
   name: z.string().min(1, "Please enter your full name."),
@@ -24,7 +36,12 @@ const formSchema = z.object({
   interests: z.string().min(1, "Please enter at least one interest."),
   experience: z.string().optional(),
   locationPreference: z.string().min(1, "Please enter your location preference."),
-  resume: z.any().optional(),
+  // Document fields
+  resume: fileSchema,
+  govtId: fileSchema,
+  educationCertificate: fileSchema,
+  addressProof: fileSchema,
+  incomeCertificate: fileSchema,
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -50,15 +67,58 @@ export default function ProfileForm() {
     values: profile,
   });
 
-  const onSubmit = (data: FormValues) => {
-    // In a real app, you'd handle file upload here.
-    const { resume, ...profileData } = data;
+  // Helper to convert file to data URI
+  const fileToDataUri = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const onSubmit = async (data: FormValues) => {
+    const profileData: any = { ...data };
+
+    // Handle file conversions
+    for (const key of ['resume', 'govtId', 'educationCertificate', 'addressProof', 'incomeCertificate']) {
+        if (data[key as keyof FormValues] instanceof File) {
+            profileData[key] = await fileToDataUri(data[key as keyof FormValues] as File);
+        }
+    }
+    
     setProfile(profileData);
     toast({
       title: "Profile Updated",
       description: "Your profile has been saved successfully.",
     });
   };
+
+  const renderFileInput = (name: keyof FormValues, label: string, description: string) => (
+     <FormField
+        control={form.control}
+        name={name}
+        render={({ field }) => (
+            <FormItem>
+                <FormLabel>{label}</FormLabel>
+                <FormControl>
+                    <div className="flex items-center gap-2">
+                        <Input 
+                            type="file" 
+                            onChange={(e) => field.onChange(e.target.files?.[0])} 
+                            className="w-full"
+                        />
+                         <Button type="button" variant="outline" size="icon">
+                            <Upload className="h-4 w-4"/>
+                        </Button>
+                    </div>
+                </FormControl>
+                <FormDescription>{description}</FormDescription>
+                <FormMessage />
+            </FormItem>
+        )}
+    />
+  );
 
   return (
     <Card>
@@ -203,25 +263,21 @@ export default function ProfileForm() {
                 </FormItem>
               )}
             />
-             <FormField
-              control={form.control}
-              name="resume"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Upload Resume</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center gap-2">
-                        <Input type="file" onChange={(e) => field.onChange(e.target.files?.[0])} className="w-full" />
-                        <Button type="button" variant="outline" size="icon">
-                            <Upload className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                  </FormControl>
-                   <FormDescription>Upload your latest resume (PDF, DOCX).</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <Separator />
+            <div className="space-y-2">
+                <h3 className="text-lg font-medium flex items-center gap-2"><FileText /> Documents</h3>
+                <p className="text-sm text-muted-foreground">
+                    Upload the required documents for verification. Max file size: 5MB. Accepted formats: PDF, JPG, PNG.
+                </p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+                {renderFileInput("resume", "Resume", "Your latest resume.")}
+                {renderFileInput("govtId", "Aadhaar or Govt ID", "Aadhaar card or other valid government-issued ID.")}
+                {renderFileInput("educationCertificate", "Educational Certificate", "Latest marksheet, diploma, or degree certificate.")}
+                {renderFileInput("addressProof", "Address Proof", "Ration card, Voter ID, etc.")}
+                {renderFileInput("incomeCertificate", "Income Certificate", "Required to validate income criteria.")}
+            </div>
+
             <Button type="submit">Save Profile</Button>
           </form>
         </Form>
@@ -229,3 +285,5 @@ export default function ProfileForm() {
     </Card>
   );
 }
+
+    

@@ -36,7 +36,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function InternshipMatcher() {
   const searchParams = useSearchParams();
-  const [profile] = useLocalStorage('user-profile', { skills: '', interests: '', locationPreference: '' });
+  const [profile] = useLocalStorage('user-profile', {});
   const [internships, setInternships] = useState<InternshipWithScore[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -65,14 +65,20 @@ export default function InternshipMatcher() {
   const onSubmit = async (data: FormValues) => {
     setIsLoading(true);
     setInternships([]);
-    try {
-      const skillsArray = data.skills.split(",").map((s) => s.trim());
-      const interestsArray = data.interests.split(",").map((i) => i.trim());
 
+    if (!profile.name) {
+      toast({
+        variant: "destructive",
+        title: "Profile Incomplete",
+        description: "Please complete your profile before matching internships.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    try {
       let result = await matchInternships({
-        skills: skillsArray,
-        interests: interestsArray,
-        location: data.location,
+        studentProfile: profile,
       });
 
       // Add a random match score for demonstration
@@ -110,7 +116,8 @@ export default function InternshipMatcher() {
              onSubmit(formValues);
         }
     }
-  }, [searchParams, profile, isLoading, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, profile, isLoading, form.getValues]);
 
 
   const handleGeoLocation = () => {
@@ -174,7 +181,7 @@ export default function InternshipMatcher() {
       <Card>
         <CardHeader>
           <CardTitle className="font-headline">Internship Search</CardTitle>
-          <CardDescription>Use your profile data or enter new search criteria.</CardDescription>
+          <CardDescription>Use your profile data to find internships. The AI will verify your eligibility using your uploaded documents.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -185,9 +192,9 @@ export default function InternshipMatcher() {
                   name="skills"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Your Skills</FormLabel>
+                      <FormLabel>Your Skills (from profile)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., React, Python, Data Analysis" {...field} />
+                        <Input placeholder="e.g., React, Python, Data Analysis" {...field} readOnly />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -198,9 +205,9 @@ export default function InternshipMatcher() {
                   name="interests"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Your Interests</FormLabel>
+                      <FormLabel>Your Interests (from profile)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., AI, Healthcare, Fintech" {...field} />
+                        <Input placeholder="e.g., AI, Healthcare, Fintech" {...field} readOnly />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -258,3 +265,5 @@ export default function InternshipMatcher() {
     </div>
   );
 }
+
+    
