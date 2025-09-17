@@ -1,106 +1,113 @@
 
 'use server';
 /**
- * @fileOverview An AI agent for matching students with internships based on their profile and uploaded documents.
+ * @fileOverview An AI flow for matching students with internships.
  *
- * - matchInternships - A function that handles the internship matching process.
- * - MatchInternshipsInput - The input type for the matchInternships function.
- * - MatchInternshipsOutput - The return type for the matchInternships function.
+ * This file defines the Genkit flow for the internship matching feature.
+ * It takes a student's profile and returns a list of suitable internships.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 
-const fileSchema = z.object({
-  dataUri: z.string(),
-  mimeType: z.string(),
+const internshipSchema = z.object({
+    companyName: z.string(),
+    title: z.string(),
+    description: z.string(),
+    location: z.string(),
+    compensation: z.string(),
+    requiredSkills: z.array(z.string()),
+});
+
+const FileSchema = z.object({
+    dataUri: z.string().describe("A data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."),
+    mimeType: z.string(),
 }).optional();
 
 const StudentProfileSchema = z.object({
   name: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
   age: z.coerce.number().optional(),
+  address: z.string().optional(),
   skills: z.string().optional(),
   qualifications: z.string().optional(),
   interests: z.string().optional(),
   experience: z.string().optional(),
   locationPreference: z.string().optional(),
-  resume: fileSchema,
-  govtId: fileSchema,
-  educationCertificate: fileSchema,
-  addressProof: fileSchema,
-  incomeCertificate: fileSchema,
+  resume: FileSchema,
+  govtId: FileSchema,
+  educationCertificate: FileSchema,
+  addressProof: FileSchema,
+  incomeCertificate: FileSchema,
 });
 
 
 export const MatchInternshipsInputSchema = z.object({
-  studentProfile: StudentProfileSchema,
-});
-
-export type MatchInternshipsInput = z.infer<typeof MatchInternshipsInputSchema>;
-
-const internshipSchema = z.object({
-  companyName: z.string(),
-  title: z.string(),
-  location: z.string(),
-  description: z.string(),
-  requiredSkills: z.array(z.string()),
-  compensation: z.string(),
+    studentProfile: StudentProfileSchema,
 });
 
 export const MatchInternshipsOutputSchema = z.array(internshipSchema);
+
+export type MatchInternshipsInput = z.infer<typeof MatchInternshipsInputSchema>;
 export type MatchInternshipsOutput = z.infer<typeof MatchInternshipsOutputSchema>;
 
-
 export async function matchInternships(input: MatchInternshipsInput): Promise<MatchInternshipsOutput> {
-    return matchInternshipsFlow(input);
+  return matchInternshipsFlow(input);
 }
 
-
 const prompt = ai.definePrompt({
-  name: 'internshipMatcherPrompt',
-  input: { schema: MatchInternshipsInputSchema },
-  output: { schema: MatchInternshipsOutputSchema },
-  prompt: `You are an expert AI career counselor for the PM Internship Scheme. Your goal is to match a student with relevant internship opportunities.
+    name: 'internshipMatcherPrompt',
+    input: { schema: MatchInternshipsInputSchema },
+    output: { schema: MatchInternshipsOutputSchema },
+    prompt: `You are an expert AI internship matching engine for the Indian Government's PM Internship Scheme.
+    Your task is to analyze the provided student profile and suggest a list of 5 relevant internships from a fictional database.
 
-  STRICTLY follow these eligibility criteria for the PM Internship Scheme:
-  - The candidate must be an Indian citizen.
-  - Age must be between 21 and 24.
-  - Minimum qualification: Class 10 / ITI / Polytechnic / Diploma / Graduate degree.
-  - The candidate should not be employed full-time or enrolled in a full-time academic programme.
-  - Students from premier institutes (IITs, IIMs, NIDs, IISERs, NITs, NLUs, etc.) are NOT eligible.
-  - Holders of higher/professional qualifications (MBA, PhD, CA, CS, MBBS, etc.) are NOT eligible.
-  - Students already enrolled in other govt apprenticeship/internship schemes (like NAPS, NATS) are NOT eligible.
-  - Candidates with family income above ₹8 lakh/year are NOT eligible.
-  - Students whose parents/spouse are permanent govt/PSU employees are NOT eligible.
+    **CRITICAL ELIGIBILITY RULES - DO NOT VIOLATE:**
+    The student MUST meet ALL of the following criteria. If not, you MUST return an empty list.
+    1.  **Age:** Must be between 21 and 24.
+    2.  **Qualifications:** Must have at least a Class 10, ITI, Polytechnic, or Diploma. They CANNOT have higher/professional degrees like MBA, PhD, CA, CS, MBBS.
+    3.  **Employment:** Must not be currently employed full-time or enrolled in a full-time academic program.
+    4.  **Income:** Family income must NOT be above ₹8 lakh/year.
+    5.  **Exclusions:** Cannot be from premier institutes (IITs, IIMs, NIDs, etc.) and their parents/spouse cannot be permanent government/PSU employees.
 
-  You will be given the student's profile information, including required documents for verification.
-  1.  First, you MUST verify the student's eligibility based on their profile data AND the provided documents. Cross-reference the information in the documents (Aadhaar, educational certificates, income certificate) with the eligibility criteria.
-  2.  If the student is NOT eligible, you MUST return an empty array.
-  3.  If the student IS eligible, generate a list of 5 diverse, realistic, and relevant internship postings that would be a good fit for their skills, qualifications, and interests.
-  4.  Ensure the generated internships are not from premier companies that would typically hire from the excluded premier institutes. Focus on small to medium-sized enterprises (SMEs), local businesses, and startups.
-  5.  Vary the required skills and locations to provide a good range of options.
+    **VERIFICATION PROCESS:**
+    You have been provided with the student's documents. You MUST use these documents as the source of truth to verify their eligibility against the rules above.
+    -   **Resume/CV:** Check for current full-time employment or enrollment in excluded institutions.
+    -   **Government ID:** Verify age.
+    -   **Educational Certificate:** Verify qualifications.
+    -   **Address Proof:** For context.
+    -   **Income Certificate:** Verify family income.
 
-  Student Profile:
-  - Name: {{{studentProfile.name}}}
-  - Age: {{{studentProfile.age}}}
-  - Skills: {{{studentProfile.skills}}}
-  - Qualifications: {{{studentProfile.qualifications}}}
-  - Interests: {{{studentProfile.interests}}}
-  - Experience: {{{studentprofile.experience}}}
-  - Location Preference: {{{studentProfile.locationPreference}}}
+    **STUDENT PROFILE & DOCUMENTS:**
+    -   **Name:** {{{studentProfile.name}}}
+    -   **Age:** {{{studentProfile.age}}}
+    -   **Skills:** {{{studentProfile.skills}}}
+    -   **Qualifications:** {{{studentProfile.qualifications}}}
+    -   **Interests:** {{{studentProfile.interests}}}
+    -   **Experience:** {{{studentProfile.experience}}}
+    -   **Location Preference:** {{{studentProfile.locationPreference}}}
 
-  Verification Documents:
-  - Govt ID: {{media url=(or studentProfile.govtId.dataUri "")}}
-  - Education Certificate: {{media url=(or studentProfile.educationCertificate.dataUri "")}}
-  - Address Proof: {{media url=(or studentProfile.addressProof.dataUri "")}}
-  - Income Certificate: {{media url=(or studentProfile.incomeCertificate.dataUri "")}}
-  - Resume: {{media url=(or studentProfile.resume.dataUri "")}}
+    {{#if studentProfile.resume}}
+    -   **Resume:** {{media url=studentProfile.resume.dataUri}}
+    {{/if}}
+    {{#if studentProfile.govtId}}
+    -   **Government ID:** {{media url=studentProfile.govtId.dataUri}}
+    {{/if}}
+    {{#if studentProfile.educationCertificate}}
+    -   **Educational Certificate:** {{media url=studentProfile.educationCertificate.dataUri}}
+    {{/if}}
+    {{#if studentProfile.addressProof}}
+    -   **Address Proof:** {{media url=studentProfile.addressProof.dataUri}}
+    {{/if}}
+    {{#if studentProfile.incomeCertificate}}
+    -   **Income Certificate:** {{media url=studentProfile.incomeCertificate.dataUri}}
+    {{/if}}
 
-  Generate the list of internships now.
-  `,
+    If the student is eligible, generate a list of 5 diverse, fictional internships that match their skills, interests, and location preference. Ensure the internships are realistic for the scheme (e.g., avoid roles requiring extremely high qualifications).
+    `,
 });
-
 
 const matchInternshipsFlow = ai.defineFlow(
   {
