@@ -1,106 +1,110 @@
 
 'use server';
 /**
- * @fileOverview An AI-powered internship matching flow.
+ * @fileOverview The AI-powered internship matching engine.
  *
- * - matchInternships - A function that finds suitable internships based on a student's profile.
+ * - matchInternships - A function that handles the internship matching process.
  * - MatchInternshipsInput - The input type for the matchInternships function.
  * - MatchInternshipsOutput - The return type for the matchInternships function.
  */
+
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-const fileSchema = z.object({
+
+// Internal schema for file uploads
+const FileSchema = z.object({
   dataUri: z.string(),
   mimeType: z.string(),
 }).optional();
 
-
+// Input schema for the matching flow
 const StudentProfileSchema = z.object({
   name: z.string().optional(),
-  email: z.string().optional(),
-  phone: z.string().optional(),
   age: z.coerce.number().optional(),
-  address: z.string().optional(),
   skills: z.string().optional(),
   qualifications: z.string().optional(),
   interests: z.string().optional(),
-  experience: z.string().optional(),
   locationPreference: z.string().optional(),
-  resume: fileSchema,
-  govtId: fileSchema,
-  educationCertificate: fileSchema,
-  addressProof: fileSchema,
-  incomeCertificate: fileSchema,
+  experience: z.string().optional(),
+  // Document fields
+  resume: FileSchema,
+  govtId: FileSchema,
+  educationCertificate: FileSchema,
+  addressProof: FileSchema,
+  incomeCertificate: FileSchema,
 });
-
-
-export const internshipSchema = z.object({
-  companyName: z.string().describe('The name of the company offering the internship.'),
-  title: z.string().describe('The title of the internship role.'),
-  location: z.string().describe('The location of the internship (e.g., "Mumbai", "Remote").'),
-  description: z.string().describe('A brief description of the internship.'),
-  requiredSkills: z.array(z.string()).describe('A list of skills required for the internship.'),
-  compensation: z.string().describe('The stipend or compensation for the internship (e.g., "₹10,000/month", "Unpaid").'),
-});
-
 export const MatchInternshipsInputSchema = z.object({
-    studentProfile: StudentProfileSchema,
+  studentProfile: StudentProfileSchema,
 });
 export type MatchInternshipsInput = z.infer<typeof MatchInternshipsInputSchema>;
 
-export const MatchInternshipsOutputSchema = z.array(internshipSchema);
+// Output schema for the matching flow
+const InternshipSchema = z.object({
+  companyName: z.string().describe('The name of the company offering the internship.'),
+  title: z.string().describe('The title of the internship position.'),
+  description: z.string().describe('A brief description of the internship.'),
+  location: z.string().describe('The location of the internship (e.g., city, or "Remote").'),
+  requiredSkills: z.array(z.string()).describe('A list of skills required for the internship.'),
+  compensation: z.string().describe('The stipend or compensation for the internship.'),
+});
+
+export const MatchInternshipsOutputSchema = z.array(InternshipSchema);
 export type MatchInternshipsOutput = z.infer<typeof MatchInternshipsOutputSchema>;
 
 
-const prompt = ai.definePrompt({
-    name: 'internshipMatchingPrompt',
-    input: { schema: MatchInternshipsInputSchema },
-    output: { schema: MatchInternshipsOutputSchema },
-    prompt: `
-    You are an advanced AI engine for the "PM Internship Scheme," a government initiative to connect Indian youth with internships. Your primary function is to act as a matching engine.
-
-    First, generate a diverse list of 5-7 fictional but realistic internship opportunities available in India. These should cover various sectors like IT, Marketing, Finance, and include different locations (e.g., Bangalore, Delhi, Remote).
-
-    Next, you will receive the profile of a student applicant. Your main goal is to find the best internship matches for this student from the list you just generated.
-
-    You must strictly adhere to the following PM Internship Scheme eligibility rules when matching:
-    - The student's age must be between 21 and 24.
-    - The student should not be employed full-time.
-    - The student should not hold higher professional qualifications like MBA, PhD, etc.
-    - The student's qualifications (like B.Tech, B.Com, Diploma) make them eligible.
-
-    Analyze the student's profile, including their skills, qualifications, interests, and location preference. The profile may also contain uploaded documents for verification. Use all this information to decide if the student is eligible for the scheme.
-
-    - If the student is NOT ELIGIBLE for the scheme based on the rules, you MUST return an empty array [].
-    - If the student IS ELIGIBLE, you must return a list of the top 3-4 most suitable internships from the list you generated. The suitability should be based on the match between the student's skills/interests and the internship requirements.
-
-    Student Profile:
-    - Name: {{{studentProfile.name}}}
-    - Age: {{{studentProfile.age}}}
-    - Qualifications: {{{studentProfile.qualifications}}}
-    - Skills: {{{studentProfile.skills}}}
-    - Interests: {{{studentProfile.interests}}}
-    - Experience: {{{studentProfile.experience}}}
-    - Location Preference: {{{studentProfile.locationPreference}}}
-
-    If documents are provided, consider them for verification. For example, a degree certificate confirms their qualifications. However, do not reject a candidate solely because a document is missing if other profile information confirms their eligibility. Your primary job is to match eligible candidates to relevant roles.
-  `,
-});
-
-const internshipMatchingFlow = ai.defineFlow(
-  {
-    name: 'internshipMatchingFlow',
-    inputSchema: MatchInternshipsInputSchema,
-    outputSchema: MatchInternshipsOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
-);
-
-
 export async function matchInternships(input: MatchInternshipsInput): Promise<MatchInternshipsOutput> {
-    return await internshipMatchingFlow(input);
+  const internshipMatchingFlow = ai.defineFlow(
+    {
+      name: 'internshipMatchingFlow',
+      inputSchema: MatchInternshipsInputSchema,
+      outputSchema: MatchInternshipsOutputSchema,
+    },
+    async (flowInput) => {
+        
+        const prompt = ai.definePrompt({
+          name: 'internshipMatchingPrompt',
+          input: { schema: MatchInternshipsInputSchema },
+          output: { schema: MatchInternshipsOutputSchema },
+          prompt: `You are an AI internship matching engine for the PM Internship Scheme.
+Your task is to act as a matching engine that suggests internships to candidates based on their profile.
+You MUST generate a list of 5 diverse, fictional internships from various fields like IT, Marketing, Management, and Design.
+
+Then, you MUST evaluate the student's profile against the PM Internship Scheme rules.
+
+Eligibility Rules:
+- Age: 21-24 years.
+- Qualifications: Minimum Class 10 / ITI / Polytechnic / Diploma / Graduate.
+- Not employed full-time.
+- Not in a premier institute (IIT, IIM, etc.).
+- No higher qualifications (MBA, PhD, etc.).
+- Family income not above ₹8 lakh/year.
+
+Your primary goal is to provide internship suggestions. Do not reject a candidate for missing documents; just note it.
+For each of the 5 generated internships, you will determine if the student is a good match based on their skills and the eligibility rules.
+The final output should be a list of the generated internships that are a potential fit. Do not explain why a student is not eligible in the output. Simply return a list of potentially suitable internships.
+
+Student Profile:
+- Name: {{studentProfile.name}}
+- Age: {{studentProfile.age}}
+- Skills: {{studentProfile.skills}}
+- Qualifications: {{studentProfile.qualifications}}
+- Interests: {{studentProfile.interests}}
+- Location Preference: {{studentProfile.locationPreference}}
+- Experience: {{studentProfile.experience}}
+
+- Resume: {{#if studentProfile.resume}}{{media url=studentProfile.resume.dataUri mimeType=studentProfile.resume.mimeType}}{{else}}Not provided{{/if}}
+- Govt ID: {{#if studentProfile.govtId}}{{media url=studentProfile.govtId.dataUri mimeType=studentProfile.govtId.mimeType}}{{else}}Not provided{{/if}}
+- Education Certificate: {{#if studentProfile.educationCertificate}}{{media url=studentProfile.educationCertificate.dataUri mimeType=studentProfile.educationCertificate.mimeType}}{{else}}Not provided{{/if}}
+- Address Proof: {{#if studentProfile.addressProof}}{{media url=studentProfile.addressProof.dataUri mimeType=studentProfile.addressProof.mimeType}}{{else}}Not provided{{/if}}
+- Income Certificate: {{#if studentProfile.incomeCertificate}}{{media url=studentProfile.incomeCertificate.dataUri mime-type=studentProfile.incomeCertificate.mimeType}}{{else}}Not provided{{/if}}
+`,
+        });
+
+      const { output } = await prompt(flowInput);
+      return output!;
+    }
+  );
+
+  return await internshipMatchingFlow(input);
 }
